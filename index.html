@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Document</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <li 
+    hidden
+    id="player_placeholder" 
+    data-player-id="null" 
+    class="player color-white">
+    <p class="player-header">Vlad</p>
+    <div class="player-body">
+      <!-- Player -->
+      <ul class="statistics inline-b va-top">
+        <li class="statistics-item">
+          <b class="inline-b va-middle">str:</b>
+          <button 
+            data-counter="str"
+            class="
+              btn 
+              btn-green 
+              btn-player-control 
+              inline-b 
+              va-middle">1</button>
+        </li>
+        <li class="statistics-item">
+          <b class="inline-b va-middle">lvl:</b>
+          <button 
+            data-counter="lvl"
+            class="
+              btn 
+              btn-orange 
+              btn-player-control 
+              inline-b 
+              va-middle">1</button>
+        </li>
+        <li class="statistics-item">
+          <b class="inline-b va-middle">curses:</b>
+          <button
+            data-counter="curse"
+            class="
+              btn 
+              btn-coffee 
+              btn-player-control 
+              inline-b 
+              va-middle">No curses</button>
+        </li>
+      </ul>
+
+      <!-- Monster -->
+      <ul data-monster-id="null" class="statistics monster-stat inline-b va-top">
+        <li class="statistics-item">
+          <b class="inline-b va-middle">str:</b>
+          <button 
+            data-monster-counter="str" 
+            class="btn btn-green btn-player-control inline-b va-middle">1</button>
+        </li>
+        <li class="statistics-item">
+          <b class="inline-b va-middle">lvl:</b>
+          <button 
+            data-monster-counter="lvl"
+            class="btn btn-orange btn-player-control inline-b va-middle">1</button>
+        </li>
+      </ul>
+
+      <div data-btn-reset="null" class="btn btn-red btn-player btn-reset">Reset Monster</div>
+    </div>
+  </li>
+  
+  <!-- Need webpack partials -->
+  <div class="scoreboard">
+    <ul id="players" class="players"></ul>
+  </div>
+
+  <script>
+    let nextId = 1;
+    class Observer {
+      notify(data) {
+        
+      }
+    }
+    class Observable {
+      constructor() {
+        this.observers = [];
+      }
+      addSubscriber(subj) {
+        this.observers.push(subj);
+      }
+      emit(data) {
+        this.observers.forEach((subj) => {
+          subj.notify(data)
+        });
+      }
+    }
+    class Entity extends Observable {
+      constructor() {
+        super();
+        this.id = nextId;
+        this.stats = {
+          lvl: 1,
+          str: 1,
+        };
+        this.addSubscriber(ui);
+        nextId++;
+      }
+      addStat(stat, amount) {
+        this.stats[stat] += amount;
+      }
+      addLvls(amount) {
+        this.addStat('lvl', amount);
+        this.addStr(amount);
+      }
+      addStr(amount) {
+        this.addStat('str', amount);
+      }
+      getLvl() {
+        return this.stats.lvl;
+      }
+      getStr() {
+        return this.stats.str;
+      }
+    }
+    class Monster extends Entity {
+      constructor() {
+        super();
+      }
+      // @override
+      addLvls(amount) {
+        super.addLvls(amount);
+        // TODO: non-dry
+        this.emit({
+          type: 'lvlChanged',
+          monsterId: this.id
+        });
+      }
+      // @override
+      addStr(amount) {
+        super.addStr(amount);
+        this.emit({
+          type: 'strChanged',
+          monsterId: this.id
+        });
+      }
+      reset() {
+        this.stats.lvl = 1;
+        this.stats.str = 1;
+        this.emit({
+          type: 'strChanged',
+          monsterId: this.id
+        });
+        this.emit({
+          type: 'lvlChanged',
+          monsterId: this.id
+        });
+      }
+    }
+    class Player extends Entity {
+      constructor(name, subscriber) {
+        super();
+        this.name = name,
+        this.stats.curses = [];
+      }
+      addCurse(curse) {
+        this.stats.curses.push(curse);
+        this.emit({
+          type: 'curse',
+          playerId: this.id
+        });
+      }
+      removeCurse(curse) {
+        const index = this.stats.curses.indexOf(curse);
+        this.stats.curses = [
+          ...this.stats.curses.slice(0, index),
+          ...this.stats.curses.slice(index + 1)
+        ];
+        this.emit({
+          type: 'curse',
+          playerId: this.id
+        });
+      }
+      // @override
+      addLvls(amount) {
+        if (
+          this.stats.lvl <= 1 && amount < 0 ||
+          this.stats.lvl >= 10 && amount > 0
+        ) return;
+        super.addLvls(amount);
+        this.emit({
+          type: 'lvlChanged',
+          playerId: this.id
+        });
+      }
+      // @override
+      addStr(amount) {
+        super.addStr(amount);
+        this.emit({
+          type: 'strChanged',
+          playerId: this.id
+        });
+      }
+      getCurses() {
+        return this.stats.curses;
+      }
+    };
+    class EntitiesList extends Observable {
+      constructor(list = []) {
+        super();
+        this.list = list;
+        this.addSubscriber(ui);
+      }
+      add(player) {
+        this.list.push(player);
+      }
+      get(playerId) {
+        return this.list.find((p) => p.id === playerId);
+      }
+    }
+    class PlayersList extends EntitiesList {
+      constructor(list = []) {
+        super(list);
+        this.emit({
+          type: 'playersCreated',
+          list: this.list
+        });
+      }
+      getIds() {
+        return this.list.map((player) => player.id);
+      }
+    }
+    class MonstersList extends EntitiesList {
+      constructor(list = []) {
+        super(list);
+        this.emit({
+          type: 'monstersCreated',
+          list: this.list
+        });
+      }
+    }
+    class UI extends Observer {
+      constructor() {
+        super();
+        this.clicked = {
+          playerId: null,
+          monsterId: null,
+          stat: null
+        }
+      }
+      updateClicked(stat, data) {
+        this.clicked.stat = stat;
+        if (data.type === 'player') {
+          this.clicked.playerId = data.value;
+        } else if (data.type === 'monster') {
+          this.clicked.monsterId = data.value;
+        }
+      }
+      createCurseField(element) {
+        element.style.display = 'none';
+        let input = document.createElement('input');
+        input.setAttribute('data-curse-input', '');
+        window.setTimeout(() => input.focus(), 0);
+        element.parentElement.append(input);
+      }
+      removeCurseInput() {
+        const input = document.querySelector('[data-curse-input]');
+        input.previousElementSibling.style.display = '';
+        input.remove();
+      }
+      // Player's changes
+      // @override
+      notify(data) {
+        super.notify(data);
+        // TODO: non-dry
+        switch(data.type) {
+          case 'lvlChanged':
+            document
+              .querySelector(
+                data.playerId ? 
+                  `[data-player-id="${data.playerId}"]` : 
+                    `[data-monster-id="${data.monsterId}"]`
+              )
+              .querySelector(data.playerId ? '[data-counter="lvl"]' : '[data-monster-counter="lvl"]')
+              .textContent = data.playerId ? 
+                playersList.get(data.playerId).getLvl() :
+                monstersList.get(data.monsterId).getLvl();
+          break;
+          case 'strChanged':
+            document
+              .querySelector(
+                data.playerId ? 
+                  `[data-player-id="${data.playerId}"]` : 
+                    `[data-monster-id="${data.monsterId}"]`
+              )
+              .querySelector(data.playerId ? '[data-counter="str"]' : '[data-monster-counter="str"]').
+              textContent = data.playerId ? 
+                playersList.get(data.playerId).getStr() :
+                monstersList.get(data.monsterId).getStr();
+          break;
+          case 'curse':
+            const curses = playersList.get(data.playerId).getCurses();
+              document
+                .querySelector(`[data-player-id="${data.playerId}"]`)
+                .querySelector('[data-counter="curse"]').
+                textContent = curses.length ? curses : 'No curses';
+          break;
+          case 'playersCreated':
+            data.list.forEach((player) => {
+              const playerEl = document.getElementById('player_placeholder').cloneNode(true);
+              playerEl.hidden = false;
+              playerEl.dataset.playerId = player.id;
+              playerEl.querySelector('.player-header').textContent = player.name;
+              document.getElementById('players').appendChild(playerEl);
+            });
+          break;
+          case 'monstersCreated':
+            const playerIds = playersList.getIds();
+            data.list.forEach((monster, index) => {
+              const playerEl = document
+                .querySelector(`[data-player-id="${playerIds[index]}"]`);
+              playerEl
+                .querySelector('[data-monster-id]')
+                .dataset
+                .monsterId = monster.id;
+              playerEl
+                .querySelector('[data-btn-reset]')
+                .dataset.btnReset = monster.id;
+            });
+          break;
+        }
+      }
+    };
+    let ui = new UI();
+    let playersList = new PlayersList([
+      new Player('Vlad'),
+      new Player('Andrew'),
+      new Player('Makar')
+    ]);
+    let monstersList = new MonstersList([
+      new Monster(),
+      new Monster()
+    ]);
+    document.body.addEventListener('click', (e) => {
+      const target = e.target;
+      const counter = target.dataset.counter;
+      const monsterCounter = target.dataset.monsterCounter;
+      if (counter) {
+        ui.updateClicked(
+          counter, 
+          {
+            type: 'player',
+            value: window.parseInt(
+              target.closest('[data-player-id]').dataset.playerId
+            )
+          }
+        );
+        ui.updateClicked(
+          counter, 
+          {
+            type: 'monster',
+            value: null
+          }
+        );
+      } 
+
+      if (counter === 'curse') {
+        ui.createCurseField(target);
+      }
+
+      if (monsterCounter && (monsterCounter === 'lvl' || monsterCounter === 'str')) {
+        ui.updateClicked(
+          monsterCounter, 
+          {
+            type: 'monster',
+            value: window.parseInt(
+              target.closest('[data-monster-id]').dataset.monsterId
+            )
+          }
+        );
+        ui.updateClicked(
+          monsterCounter, 
+          {
+            type: 'player',
+            value: null
+          }
+        );
+      }
+    });
+    document.body.addEventListener('keydown', (e) => {
+      let entity;
+
+      if (ui.clicked.playerId) {
+        entity = playersList.get(ui.clicked.playerId);
+      } else if (ui.clicked.monsterId) {
+        entity = monstersList.get(ui.clicked.monsterId)
+      }
+
+      if (e.which === 187 && e.shiftKey) {
+        switch (ui.clicked.stat) {
+          case 'lvl':
+            entity.addLvls(1);
+          break;
+          case 'str':
+            entity.addStr(1);
+          break;
+        }
+      } else if (e.which === 189 && e.shiftKey) {
+        switch (ui.clicked.stat) {
+          case 'lvl':
+            entity.addLvls(-1);
+          break;
+          case 'str':
+            entity.addStr(-1);
+          break;
+        }
+      }
+    });
+    document.body.addEventListener('keydown', (e) => {
+      if (!e.target.hasAttribute('data-curse-input')) return;
+
+      ui.updateClicked(e.target.value, e.target.closest('[data-player-id]').dataset.playerId);
+
+      if (e.which === 13) {
+        playersList.get(ui.clicked.playerId).addCurse(ui.clicked.stat);
+        ui.removeCurseInput();
+      } else if (e.which === 8 && e.shiftKey) {
+        playersList.get(ui.clicked.playerId).removeCurse(ui.clicked.stat);
+        ui.removeCurseInput();
+      }
+    });
+    document.body.addEventListener('click', (e) => {
+      if (!e.target.hasAttribute('data-btn-reset')) return;
+      monstersList
+        .get(
+          window.parseInt(e.target.dataset.btnReset)
+        )
+        .reset();
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
